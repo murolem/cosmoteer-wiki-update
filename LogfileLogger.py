@@ -1,6 +1,8 @@
 import csv
 from typing import Iterable
 
+from utils import open_with_create_missing_directories
+
 
 class LogfileLogger:
     """Disk logger for modification operations."""
@@ -10,7 +12,7 @@ class LogfileLogger:
 
         # generate log files or clear them out if they exist
         for log_path in file_log_paths:
-            open(log_path, "w").close()
+            open_with_create_missing_directories(log_path, "w").close()
 
         # write initial rows
         self.__write_row(

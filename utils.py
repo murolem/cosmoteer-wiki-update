@@ -1,5 +1,6 @@
 import itertools
 import math
+import os
 import sys
 from collections import UserDict
 from enum import Enum
@@ -34,7 +35,7 @@ def get_first_list_item_or_none(list: list[Any]):
 
 
 def remove_first_item_from_list_matching_condition(
-    list: list[Any], condition: Callable[[Any], bool]
+        list: list[Any], condition: Callable[[Any], bool]
 ) -> None:
     for i, item in enumerate(list):
         if condition(item):
@@ -43,7 +44,7 @@ def remove_first_item_from_list_matching_condition(
 
 
 def get_first_list_item_matching_condition(
-    list: list[T], condition: Callable[[T], bool]
+        list: list[T], condition: Callable[[T], bool]
 ) -> T | None:
     for item in list:
         if condition(item):
@@ -61,3 +62,21 @@ def clamp_int(value: int, min_lim: int, max_lim: int) -> int:
 
 def clamp_float(value: float, min_lim: int | float, max_lim: int | float) -> float:
     return max(min_lim, min(value, max_lim))
+
+
+def open_with_create_missing_directories(filepath: str, mode: str, *args, **kwargs):
+    """
+    Opens a file and returns a stream. Creates missing directories if needed.
+
+    Refer to `open()` docs.
+
+    :param filepath: Path to file.
+    :param mode: Mode. Refer to `open()` docs.
+    :param args: Args to passthrough to `open()`. Refer to `open()` docs.
+    :param kwargs: Args to passthrough to `open()`. Refer to `open()` docs.
+    :return: Filestream.
+    """
+
+    dir_path = os.path.split(os.path.abspath(filepath))[0]
+    os.makedirs(dir_path, exist_ok=True)
+    return open(filepath, mode, *args, **kwargs)

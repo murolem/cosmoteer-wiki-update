@@ -4,8 +4,6 @@ import os
 from enum import Enum
 from typing import Any, Callable, Dict, Literal, TypeVar, Generic
 
-from utils import EnumDict
-
 # =========================
 # = SECTION: TRANSFORMERS =
 # =========================
@@ -40,6 +38,8 @@ class CsvTransformer:
 
         :exception Exception: When any index in `columns` is negative.
         """
+
+        self.columns = []
 
         # for all columns
         if columns == 'all':
@@ -115,12 +115,12 @@ class CsvTransformerStripWhitespace(CsvTransformer):
 
 class BaseInputDataLoader:
     data: Any
-    __has_loaded_data: bool
+    input_filepath: str
 
     def __init__(self, input_filepath: str):
         self.input_filepath = input_filepath
 
-    def __assertFileExists(self):
+    def assert_file_exists(self):
         """Checks whether the input file exists. Throws an error if it doesn't."""
 
         if not os.path.isfile(self.input_filepath):
@@ -154,6 +154,7 @@ class BaseInputDataLoader:
 
 class CsvDataLoader(BaseInputDataLoader):
     data: list[list[str]]
+    input_filepath: str
     __has_loaded_data: bool = False
 
     def __init__(self, input_filepath: str):
@@ -181,9 +182,9 @@ class CsvDataLoader(BaseInputDataLoader):
         if self.__has_loaded_data:
             raise Exception("loading error: already loaded")
 
-        self.__assertFileExists()
+        super().assert_file_exists()
 
-        with open(self.input_filename, "r") as f:
+        with open(self.input_filepath, "r") as f:
             reader = csv.reader(f)
             if skip_header_row:
                 next(reader, None)
@@ -195,7 +196,7 @@ class CsvDataLoader(BaseInputDataLoader):
 
                 self.data.append(row)
 
-            self.__has_loaded_data = true
+            self.__has_loaded_data = True
 
         return self.data
 
@@ -212,7 +213,7 @@ class CsvDataLoader(BaseInputDataLoader):
         :exception Exception: When called before `load()`.
         """
 
-        if self.__has_loaded_data:
+        if not self.__has_loaded_data:
             raise Exception("page list extracting error: call load() first")
 
         page_titles: list[str] = []

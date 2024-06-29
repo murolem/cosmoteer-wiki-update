@@ -42,20 +42,20 @@ pages_limit = 11111
 # note that this is respected even if no updated are actually happen.
 updates_delay_seconds = 0
 
+# filename of the output file.
+# this file can be used to save any data you need that the logfile can't.
+output_filename = "output.csv"
+
 # ========================
 # = SETTINGS: INPUT DATA =
 # ========================
 
 # [MAIN SWITCH:] whether to use input data
-use_input_data = False
+use_input_data = True
 
 # filename of the input file.
 # this file is used to load any data you might need.
 input_filename = "input.csv"
-
-# filename of the output file.
-# this file can be used to save any data you need that the logfile can't.
-output_filename = "output.csv"
 
 # input data loader
 input_data_loader: CsvDataLoader = CsvDataLoader(input_filename)
@@ -74,7 +74,7 @@ if use_input_data:
 
 # [MAIN SWITCH:] whether to source the page list from input data.
 # NOTE: usage of input data (`use_input_data`) must be enabled.
-source_pages_from_input_data = False
+source_pages_from_input_data = True
 
 # a list of page titles to iterate over.
 page_titles: list[str] = []
@@ -264,26 +264,37 @@ class TemplateModifier(TemplateModifierBase):
         # = SCRIPT: MAIN =
         # ================
 
-        # main param name
-        main_param_name = "hyperdrive_efficiency"
+        main_param_name = "hyperdrive_efficiency_percentage"
 
-        hyperdrive_efficiency_str = get_param_value_from_template(main_param_name, '')
-        if hyperdrive_efficiency_str == '':
+        matching_input_entry = get_first_list_item_matching_condition(input_data_loader.data, lambda entry: entry[0] == self.current_page.page_title)
+        if matching_input_entry is None:
             # do nothing...
-            logfile_logger.log_value_change(self.current_page.page_title, main_param_name, '', '', note="no value")
+            logfile_logger.log_error(self.current_page.page_title, main_param_name, 'no matching input entry')
             return
 
-        hyperdrive_efficiency_int = 0
-        try:
-            hyperdrive_efficiency_int = int(hyperdrive_efficiency_str.replace('%', ''))
-        except Exception as e:
-            logfile_logger.log_error(self.current_page.page_title, main_param_name, 'failed to parse param to int',
-                                     hyperdrive_efficiency_str)
-            return
+        new_value = "absent"
 
-        set_param_value("hyperdrive_efficiency_percentage", str(hyperdrive_efficiency_int),
-                        before="hyperdrive_efficiency")
-        remove_param("hyperdrive_efficiency")
+        set_param_value(main_param_name, new_value)
+
+        # main_param_name = "hyperdrive_efficiency"
+        #
+        # hyperdrive_efficiency_str = get_param_value_from_template(main_param_name, '')
+        # if hyperdrive_efficiency_str == '':
+        #     # do nothing...
+        #     logfile_logger.log_value_change(self.current_page.page_title, main_param_name, '', '', note="no value")
+        #     return
+        #
+        # hyperdrive_efficiency_int = 0
+        # try:
+        #     hyperdrive_efficiency_int = int(hyperdrive_efficiency_str.replace('%', ''))
+        # except Exception as e:
+        #     logfile_logger.log_error(self.current_page.page_title, main_param_name, 'failed to parse param to int',
+        #                              hyperdrive_efficiency_str)
+        #     return
+        #
+        # set_param_value("hyperdrive_efficiency_percentage", str(hyperdrive_efficiency_int),
+        #                 before="hyperdrive_efficiency")
+        # remove_param("hyperdrive_efficiency")
 
         # any changes made before returning will automatically be saved by the runner
         return
