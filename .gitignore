@@ -1,2 +1,18 @@
 venv/*
 .idea/*
+# python cache
+__pycache__
+
+# credintials files
+wiki_account_*.json
+
+# copies of input files for history
+input copies
+
+# input files
+input.*
+
+# logs
+logfiles
+logfile.csv
+output logs
