@@ -2,6 +2,7 @@ import csv
 import datetime
 import html
 import json
+import re
 import shutil
 import string
 from time import sleep, strftime
@@ -29,14 +30,16 @@ site = WikiggClient("cosmoteer", credentials=credentials, max_retries_mwc=25)
 template_name = "Ship infobox"
 
 # EDIT SUMMARY
-summary = "Ship pages data cleanup: ship infobox 'hyperdrive_efficiency' param"
+summary = "Ship pages data cleanup: ship infobox 'crew' param"
 
 # whether to run the program without doing any changes
+# NOTE: this functionality is implemented LOCALLY in methods you can see below in `update_template`.
+# it WILL NOT WORK anywhere else UNLESS you implement it YOURSELF.
 dry_run = False
 
 # limit on how many pages to process.
 # set to large number to process all the pages.
-pages_limit = 11111
+pages_limit = 111111111
 
 # delay for updates in seconds
 # note that this is respected even if no updated are actually happen.
@@ -51,7 +54,7 @@ output_filename = "output.csv"
 # ========================
 
 # [MAIN SWITCH:] whether to use input data
-use_input_data = True
+use_input_data = False
 
 # filename of the input file.
 # this file is used to load any data you might need.
@@ -74,7 +77,7 @@ if use_input_data:
 
 # [MAIN SWITCH:] whether to source the page list from input data.
 # NOTE: usage of input data (`use_input_data`) must be enabled.
-source_pages_from_input_data = True
+source_pages_from_input_data = False
 
 # a list of page titles to iterate over.
 page_titles: list[str] = []
@@ -179,7 +182,7 @@ class TemplateModifier(TemplateModifierBase):
             # (which naturally is somehow always there)
             return str(param_value).strip()
 
-        def set_param_value(param_name: str, value: str, *args: object, **kwargs: object) -> None:
+        def set_param_value(param_name: str, value: str, before: str | None = None, after: str | None = None, *args: object, **kwargs: object) -> None:
             """
             Sets value of a param in the current template.
 
@@ -187,13 +190,45 @@ class TemplateModifier(TemplateModifierBase):
 
             :param param_name: Name of the param.
             :param value: Value of the param.
+            :param before: Name of a param that our param should go before.
+            Specify either this, or `after:`.
+            :param after: Name of a param that our param should go after.
+            Specify either this, or `before:`.
+
+            :exception Exception: If both `before` and `after` are not specified.
+            :exception Exception: If both `before` and `after` are specified.
+            :exception Exception: If parameter `before`/`after` is specified and doesn't exist.
             """
 
             param_exists = template.has(param_name)
             previous_value = get_param_value_from_template(param_name) if param_exists else None
 
-            if not dry_run:
-                template.add(param_name, value, *args, **kwargs)
+            if after is not None:
+                # since template.add doesn't have "after" param, we need to do it ourselves.
+                # based on code from local `move_param()`
+                if not template.has(after):
+                    raise Exception(f"after param '{after}' is missing from the template")
+
+                if param_exists:
+                    remove_param(param_name)
+
+                # find the next param after the "after" param, so we can place our param before it
+                after_param_index_matches = [i for i in range(len(template.params)) if
+                                             template.params[i].name == after]
+                # match is guaranteed since we've already checked that template has "after" param
+                after_param_index = after_param_index_matches[0]
+
+                if not dry_run:
+                    # if "after" param is the last param in the template,
+                    # we can simply add our param - it will be appended to the end of param list
+                    if after_param_index == len(template.params) - 1:
+                        template.add(param_name, value, *args, **kwargs)
+                    # otherwise we add our param before the next param after the "after" param
+                    else:
+                        template.add(param_name, value, before=template.params[after_param_index + 1].name, *args, **kwargs)
+            else:
+                if not dry_run:
+                    template.add(param_name, value, *args, **kwargs)
 
             logfile_logger.log_value_change(
                 self.current_page.page_title,
@@ -260,41 +295,115 @@ class TemplateModifier(TemplateModifierBase):
                 param_new_name
             )
 
+        def move_param(param_name: str, before: str | None = None, after: str | None = None) -> None:
+            """
+            Moves parameter before or after another parameter.
+            Specify either `before` or `after`, but not both.
+            Will throw an error if any of the parameters do not exist.
+
+            :param param_name: Name of the parameter to move.
+            :param before: Name of a param that our param should go before.
+            Specify either this, or `after:`.
+            :param after: Name of a param that our param should go after.
+            Specify either this, or `before:`.
+
+            :exception Exception: If both `before` and `after` are not specified.
+            :exception Exception: If both `before` and `after` are specified.
+            :exception Exception: If parameter `param_name` doesn't exist.
+            :exception Exception: If parameter `before`/`after` doesn't exist.
+
+            :return:
+            """
+
+            if before is None and after is None:
+                raise Exception("both 'before' and 'after' are 'None'")
+            elif (before is not None) and (after is not None):
+                raise Exception("both 'before' and 'after' are set")
+            elif not template.has(param_name):
+                raise Exception(f"param '{param_name}' is missing from the template")
+
+            if before is not None:
+                if not template.has(before):
+                    raise Exception(f"before param '{before}' is missing from the template")
+
+                param_value = get_param_value_from_template(param_name)
+                remove_param(param_name)
+                set_param_value(param_name, param_value, before=before)
+
+                logfile_logger.log_param_move(self.current_page.page_title, param_name, before=before)
+            else:
+                if not template.has(after):
+                    raise Exception(f"after param '{after}' is missing from the template")
+
+                param_value = get_param_value_from_template(param_name)
+                remove_param(param_name)
+
+                # find the next param after the "after" param, so we can place our param before it
+                after_param_index_matches = [i for i in range(len(template.params)) if template.params[i].name == after]
+                # match is guaranteed since we've already checked that template has "after" param
+                after_param_index = after_param_index_matches[0]
+
+                # if "after" param is the last param in the template,
+                # we can simply add our param - it will be appended to the end of param list
+                if after_param_index == len(template.params) - 1:
+                    set_param_value(param_name, param_value)
+                # otherwise we add our param before the next param after the "after" param
+                else:
+                    set_param_value(param_name, param_value, before=template.params[after_param_index + 1].name)
+
+                set_param_value(param_name, param_value, before=before)
+
+                logfile_logger.log_param_move(self.current_page.page_title, param_name, after=after)
+
         # ================
         # = SCRIPT: MAIN =
         # ================
 
-        main_param_name = "hyperdrive_efficiency_percentage"
+        # main_param_name = "hyperdrive_efficiency_percentage"
+        #
+        # matching_input_entry = get_first_list_item_matching_condition(input_data_loader.data, lambda entry: entry[0] == self.current_page.page_title)
+        # if matching_input_entry is None:
+        #     # do nothing...
+        #     logfile_logger.log_error(self.current_page.page_title, main_param_name, 'no matching input entry')
+        #     return
+        #
+        # new_value = "absent"
+        #
+        # set_param_value(main_param_name, new_value)
 
-        matching_input_entry = get_first_list_item_matching_condition(input_data_loader.data, lambda entry: entry[0] == self.current_page.page_title)
-        if matching_input_entry is None:
+        crew_param_name = "crew"
+        suggested_crew_param_name = "suggested_crew"
+
+        # check if param was already added
+        if template.has(suggested_crew_param_name):
             # do nothing...
-            logfile_logger.log_error(self.current_page.page_title, main_param_name, 'no matching input entry')
+            logfile_logger.log_note(self.current_page.page_title, crew_param_name, "already processed")
             return
 
-        new_value = "absent"
+        if not template.has(crew_param_name):
+            # do nothing...
+            logfile_logger.log_error(self.current_page.page_title, crew_param_name, 'param is not present')
+            return
 
-        set_param_value(main_param_name, new_value)
+        param_value_str = get_param_value_from_template(crew_param_name)
+        crew_current = re.search(r"\d+", param_value_str, re.MULTILINE)
+        if crew_current is None:
+            # do nothing...
+            logfile_logger.log_error(self.current_page.page_title, crew_param_name, 'failed to extract the current crew count', param_value_str)
+            return
 
-        # main_param_name = "hyperdrive_efficiency"
-        #
-        # hyperdrive_efficiency_str = get_param_value_from_template(main_param_name, '')
-        # if hyperdrive_efficiency_str == '':
-        #     # do nothing...
-        #     logfile_logger.log_value_change(self.current_page.page_title, main_param_name, '', '', note="no value")
-        #     return
-        #
-        # hyperdrive_efficiency_int = 0
-        # try:
-        #     hyperdrive_efficiency_int = int(hyperdrive_efficiency_str.replace('%', ''))
-        # except Exception as e:
-        #     logfile_logger.log_error(self.current_page.page_title, main_param_name, 'failed to parse param to int',
-        #                              hyperdrive_efficiency_str)
-        #     return
-        #
-        # set_param_value("hyperdrive_efficiency_percentage", str(hyperdrive_efficiency_int),
-        #                 before="hyperdrive_efficiency")
-        # remove_param("hyperdrive_efficiency")
+        crew_current = int(crew_current.group(0))
+
+        crew_suggested = re.search(r"Suggested: ([+-]?([0-9]*[.])?[0-9]+)", param_value_str)
+        if crew_suggested is None:
+            # do nothing...
+            logfile_logger.log_error(self.current_page.page_title, crew_param_name, 'failed to extract the suggested crew count', param_value_str)
+            return
+
+        crew_suggested = int(crew_suggested.group(1))
+
+        set_param_value(crew_param_name, str(crew_current))
+        set_param_value(suggested_crew_param_name, str(crew_suggested), after=crew_param_name)
 
         # any changes made before returning will automatically be saved by the runner
         return

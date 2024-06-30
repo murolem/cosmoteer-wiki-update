@@ -19,7 +19,29 @@ class LogfileLogger:
             ["page title", "param_name", "error status", "old value", "new value", "has value changed?", "notes"]
         )
 
-    def log_value_change(self, page_title: str, param_name: str, value_before: str, value_after: str, note: str | None = None, compare_for_changes: bool = True) -> None:
+    def log_note(self, page_title: str, param_name: str, note: str):
+        """
+        Simply logs a note about a parameter.
+
+        :param page_title: Title of the current page.
+        :param param_name: Name of the parameter.
+        :param note: A note.
+        """
+
+        self.__write_row(
+            [
+                page_title,
+                param_name,
+                "ok",  # error status
+                '',  # value before
+                '',  # value after
+                '',  # has value changed,
+                note
+            ]
+        )
+
+    def log_value_change(self, page_title: str, param_name: str, value_before: str, value_after: str,
+                         note: str | None = None, compare_for_changes: bool = True) -> None:
         """
         Logs a template parameter change.
 
@@ -86,16 +108,45 @@ class LogfileLogger:
             ]
         )
 
-    def log_error(self, page_title: str, param_name: str, error_text: str, value_before: str = '',
-                  value_after: str = '') -> None:
+    def log_param_move(self, page_title: str, param_name: str, before: str | None = None, after: str | None = None) -> None:
+        """
+        Logs a template parameter move after or before another param.
+
+        :param page_title: Title of the current page.
+        :param param_name: Name of the parameter.
+        :param before: Name of the parameter that the param now precedes.
+        Specify either this, or `after:`.
+        :param after: Name of the parameter that the param now follows after.
+        Specify either this, or `before:`.
+        """
+
+        if before is None and after is None:
+            raise Exception("both 'before' and 'after' are 'None'")
+        elif (before is not None) and (after is not None):
+            raise Exception("both 'before' and 'after' are set")
+
+        self.__write_row(
+            [
+                page_title,
+                param_name,
+                "ok",  # error status
+                "",  # value before
+                "",  # value after
+                "",  # has value changed
+                f"param MOVED {'before' if before is not None else 'after'} param '{before if before is not None else after}'"  # notes
+            ]
+        )
+
+    def log_error(self, page_title: str, param_name: str, error_text: str, value_before: str | None = None,
+                  value_after: str | None = None) -> None:
         """
         Logs an error.
 
         :param page_title: Title of the current page.
         :param param_name: Name of the parameter.
         :param error_text: Text of the error.
-        :param value_before: Old value, if relevant.
-        :param value_after: New value, if relevant.
+        :param value_before: Old value, if relevant. `None` is used for a lack of value and is the default.
+        :param value_after: New value, if relevant. `None` is used for a lack of value and is the default.
         """
 
         self.__write_row(
@@ -105,7 +156,7 @@ class LogfileLogger:
                 error_text,  # error status
                 value_before,
                 value_after,
-                value_before != value_after  # has value changed
+                value_before != value_after if (value_before is not None) and (value_after is not None) else None  # has value changed
             ]
         )
 
